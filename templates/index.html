@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NAT — Voice Debate</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Outfit:wght@400;500;600&display=swap');
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  font-family: 'Outfit', sans-serif;
+}
+
+/* ===== FULL SCREEN BACKGROUND ===== */
+#gameWrapper {
+  position: relative;
+  width: 100vw; height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;  /* content anchors to bottom */
+}
+
+/* Background image fills entire screen */
+#bgImg {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  z-index: 0;
+  image-rendering: pixelated;
+}
+
+/* Ambient emotion glow — tints the whole bg */
+#ambientBg {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  transition: background 1.4s ease;
+}
+
+/* ===== AVATAR ===== */
+.avatar-stage {
+  position: absolute;
+  bottom: 170px;   /* sits above the textbox */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.avatar-wrap {
+  position: relative;
+  width: 520px; height: 520px;
+}
+
+/* No circle — avatar floats freely on the background */
+.avatar-img-wrap {
+  position: relative;
+  width: 100%; height: 100%;
+  filter: drop-shadow(0 0 18px rgba(120,180,255,0.5));
+  transition: filter 0.6s ease;
+}
+
+#avatarImg {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  transition: filter 0.6s ease;
+}
+
+/* Emotion glow rings around avatar (no circle crop) */
+.glow-ring {
+  position: absolute; inset: -15px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.6s, box-shadow 0.6s;
+  z-index: -1;
+}
+.avatar-img-wrap.glowing .glow-ring { opacity: 1; }
+
+/* Float animation while speaking */
+.avatar-wrap.speaking .avatar-img-wrap {
+  animation: float 2.2s ease-in-out infinite;
+}
+@keyframes float {
+  0%,100% { transform: translateY(0px); }
+  50%      { transform: translateY(-10px); }
+}
+
+/* Wobble when angry */
+.avatar-wrap.angry .avatar-img-wrap {
+  animation: wobble 0.4s ease-in-out infinite alternate;
+}
+@keyframes wobble {
+  from { transform: rotate(-2deg); }
+  to   { transform: rotate(2deg); }
+}
+
+/* Bounce when happy */
+.avatar-wrap.happy .avatar-img-wrap {
+  animation: bounce 0.5s ease-in-out infinite alternate;
+}
+@keyframes bounce {
+  from { transform: translateY(0px) scale(1); }
+  to   { transform: translateY(-8px) scale(1.03); }
+}
+
+/* Droop when sad */
+.avatar-wrap.sad .avatar-img-wrap {
+  animation: droop 2s ease-in-out infinite alternate;
+}
+@keyframes droop {
+  from { transform: rotate(-1deg) translateY(0); }
+  to   { transform: rotate(1deg) translateY(4px); }
+}
+
+/* Listening pulse */
+.avatar-wrap.listening .avatar-img-wrap {
+  animation: listenPulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes listenPulse {
+  from { filter: drop-shadow(0 0 10px rgba(80,220,255,0.4)); }
+  to   { filter: drop-shadow(0 0 30px rgba(80,220,255,0.9)); }
+}
+
+/* No extra CSS needed — avatar image does all the work */
+
+/* Emotion particles */
+.particles {
+  position: absolute; inset: -30px;
+  pointer-events: none; z-index: 6;
+}
+.particle {
+  position: absolute;
+  font-size: 1.2rem; opacity: 0;
+  animation: fly 1.4s ease-out forwards;
+}
+@keyframes fly {
+  0%   { opacity:1; transform: translateY(0) scale(1) rotate(0deg); }
+  100% { opacity:0; transform: translateY(-80px) scale(0.3) rotate(20deg); }
+}
+
+/* Emotion label above avatar */
+#emotionLabel {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.5rem;
+  letter-spacing: 0.12em;
+  color: white;
+  text-shadow: 0 0 8px currentColor;
+  height: 14px;
+  margin-bottom: 6px;
+  opacity: 0;
+  transition: opacity 0.4s, color 0.5s;
+}
+#emotionLabel.show { opacity: 1; }
+
+/* ===== BOTTOM UI — VISUAL NOVEL STYLE ===== */
+.bottom-ui {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Name tag above textbox */
+.name-tag {
+  display: inline-block;
+  background: rgba(10,20,50,0.88);
+  border: 2px solid rgba(120,180,255,0.5);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  padding: 4px 14px 3px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.52rem;
+  color: #a8d0ff;
+  letter-spacing: 0.12em;
+  margin-left: 12px;
+  align-self: flex-start;
+  transition: color 0.6s, border-color 0.6s;
+}
+
+/* Main textbox */
+.textbox {
+  width: 100%;
+  min-height: 100px;
+  background: rgba(8,14,35,0.88);
+  border: 2.5px solid rgba(120,180,255,0.45);
+  border-radius: 0 8px 8px 8px;
+  padding: 14px 70px 14px 16px;  /* right padding for button */
+  position: relative;
+  backdrop-filter: blur(6px);
+  transition: border-color 0.6s;
+}
+
+/* Text inside the box */
+#replyText {
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: #ddeeff;
+  min-height: 52px;
+  transition: color 0.5s;
+}
+
+/* Blinking cursor at end of text */
+#cursor {
+  display: inline-block;
+  width: 8px; height: 14px;
+  background: #a8d0ff;
+  margin-left: 3px;
+  vertical-align: middle;
+  animation: blink 0.8s step-end infinite;
+  opacity: 0;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* User speech — shown above reply */
+#userText {
+  font-size: 0.75rem;
+  color: rgba(180,210,255,0.55);
+  font-style: italic;
+  margin-bottom: 6px;
+  min-height: 16px;
+  transition: opacity 0.3s;
+}
+
+/* Status line */
+#statusText {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.42rem;
+  color: rgba(120,160,220,0.5);
+  letter-spacing: 0.1em;
+  margin-top: 4px;
+}
+
+/* ===== MIC BUTTON — side of textbox ===== */
+.mic-btn {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(120,180,255,0.5);
+  background: rgba(10,20,50,0.85);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem;
+  transition: all 0.2s;
+  outline: none;
+  backdrop-filter: blur(4px);
+}
+.mic-btn:hover:not(:disabled) {
+  border-color: rgba(120,180,255,0.9);
+  background: rgba(20,40,90,0.9);
+  transform: scale(1.08);
+}
+.mic-btn:active:not(:disabled) { transform: scale(0.92); }
+
+.mic-btn.listening {
+  border-color: rgba(48,220,255,0.8);
+  background: rgba(10,40,60,0.9);
+  animation: micGlow 0.75s ease-in-out infinite alternate;
+}
+@keyframes micGlow {
+  from { box-shadow: 0 0 0 0 rgba(48,220,255,0.3); }
+  to   { box-shadow: 0 0 0 10px rgba(48,220,255,0); }
+}
+
+.mic-btn:disabled {
+  opacity: 0.3; cursor: not-allowed;
+  transform: none !important; animation: none !important;
+}
+
+/* Pixel-style corner decorations on textbox */
+.textbox::before, .textbox::after {
+  content: '';
+  position: absolute;
+  width: 8px; height: 8px;
+  border-color: rgba(120,180,255,0.6);
+  border-style: solid;
+}
+.textbox::before { bottom: -2px; left: -2px; border-width: 0 0 2px 2px; }
+.textbox::after  { bottom: -2px; right: -2px; border-width: 0 2px 2px 0; }
+</style>
+</head>
+<body>
+
+<div id="gameWrapper">
+  <!-- Background -->
+  <img id="bgImg" src="/bg.png" alt="background">
+  <div id="ambientBg"></div>
+
+  <!-- Avatar stage -->
+  <div class="avatar-stage">
+
+    <div class="avatar-wrap" id="avatarWrap">
+      <div class="avatar-img-wrap" id="avatarImgWrap">
+        <div class="glow-ring" id="glowRing"></div>
+        <!--
+          TWO-FRAME MOUTH SYSTEM
+          For each emotion, two images swap while NAT speaks:
+            neutral_closed.png  / neutral_open.png
+            angry_closed.png    / angry_open.png
+            sad_closed.png      / sad_open.png
+
+          Both images are stacked — only one is visible at a time.
+          The closed frame is also the default expression image.
+        -->
+        <img id="frameOpen" src="/neutral_open.png" alt="NAT speaking"
+          style="position:absolute; inset:0; width:100%; height:100%;
+                object-fit:contain; image-rendering:pixelated;
+                opacity:1; z-index:1;">
+
+        <img id="frameClosed" src="/neutral_closed.png" alt="NAT"
+          style="position:absolute; inset:0; width:100%; height:100%;
+                object-fit:contain; image-rendering:pixelated;
+                opacity:1; z-index:2;
+                transition:opacity 0.18s ease-in-out;">
+
+        <div id="overlayAngry"></div>
+        <div id="overlayHappy"></div>
+        <div id="overlaySad"></div>
+        <div id="overlaySmug"></div>
+
+        <!-- Emotion particles -->
+        <div class="particles" id="particles"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom visual novel UI -->
+  <div class="bottom-ui">
+    <div class="name-tag" id="nameTag">NAT</div>
+    <div class="textbox" id="textbox">
+      <div id="userText"></div>
+      <div id="replyText">Hello. I am NAT — press the mic button and make your argument.<span id="cursor"></span></div>
+      <div id="statusText">READY</div>
+      <button class="mic-btn" id="micBtn" onclick="handleMic()">🎤</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  EMOTIONS — pixel art soft-blue palette
+// ============================================================
+const EMOTIONS = {
+  neutral: {
+    label:'', labelColor:'#88bbff',
+    ambientBg: 'radial-gradient(ellipse 80% 60% at 50% 100%, rgba(80,120,255,0.08), transparent)',
+    glowColor: '0 0 40px rgba(100,160,255,0.45)',
+    glowBg:    'radial-gradient(circle, rgba(100,160,255,0.3), transparent 70%)',
+    borderColor:'rgba(120,180,255,0.45)',
+    imgFilter:  'drop-shadow(0 0 18px rgba(120,180,255,0.5))',
+    avatarClass:'',
+    mouthColor: '#88bbff',
+    textColor:  '#ddeeff',
+    particles:  [],
+    rate:0.95, pitch:1.05,
+  },
+  angry: {
+    label:'ANGRY !!', labelColor:'#ff6070',
+    ambientBg: 'radial-gradient(ellipse 80% 60% at 50% 100%, rgba(255,30,50,0.12), transparent)',
+    glowColor: '0 0 50px rgba(255,40,60,0.7)',
+    glowBg:    'radial-gradient(circle, rgba(255,50,60,0.35), transparent 70%)',
+    borderColor:'rgba(255,50,70,0.6)',
+    imgFilter:  'drop-shadow(0 0 22px rgba(255,40,60,0.8)) saturate(1.3)',
+    avatarClass:'angry',
+    mouthColor: '#ff5060',
+    textColor:  '#ffd0d0',
+    particles:  ['💢','⚡','💢','⚡'],
+    rate:1.1, pitch:0.82,
+  },
+  happy: {
+    label:'HAPPY !!', labelColor:'#ffe060',
+    ambientBg: 'radial-gradient(ellipse 80% 60% at 50% 100%, rgba(255,200,20,0.1), transparent)',
+    glowColor: '0 0 45px rgba(255,210,40,0.65)',
+    glowBg:    'radial-gradient(circle, rgba(255,210,40,0.3), transparent 70%)',
+    borderColor:'rgba(255,200,40,0.55)',
+    imgFilter:  'drop-shadow(0 0 22px rgba(255,200,40,0.7)) brightness(1.08)',
+    avatarClass:'happy',
+    mouthColor: '#ffaa20',
+    textColor:  '#fff5cc',
+    particles:  ['✨','⭐','💫','✨','⭐'],
+    rate:1.05, pitch:1.25,
+  },
+  sad: {
+    label:'sad...', labelColor:'#70b8ff',
+    ambientBg: 'radial-gradient(ellipse 80% 60% at 50% 100%, rgba(40,80,200,0.12), transparent)',
+    glowColor: '0 0 40px rgba(60,120,220,0.5)',
+    glowBg:    'radial-gradient(circle, rgba(60,120,220,0.28), transparent 70%)',
+    borderColor:'rgba(60,120,220,0.45)',
+    imgFilter:  'drop-shadow(0 0 18px rgba(60,120,220,0.6)) brightness(0.88) saturate(0.8)',
+    avatarClass:'sad',
+    mouthColor: '#5090d0',
+    textColor:  '#b8d0f0',
+    particles:  ['💧','😢','💧'],
+    rate:0.86, pitch:0.90,
+  },
+  smug: {
+    label:'heh.', labelColor:'#88ff88',
+    ambientBg: 'radial-gradient(ellipse 80% 60% at 50% 100%, rgba(80,200,30,0.1), transparent)',
+    glowColor: '0 0 42px rgba(100,220,60,0.55)',
+    glowBg:    'radial-gradient(circle, rgba(100,220,60,0.28), transparent 70%)',
+    borderColor:'rgba(100,220,60,0.45)',
+    imgFilter:  'drop-shadow(0 0 20px rgba(100,220,60,0.6)) hue-rotate(8deg)',
+    avatarClass:'smug',
+    mouthColor: '#60d030',
+    textColor:  '#d0ffcc',
+    particles:  ['💅','⭐','😏'],
+    rate:0.92, pitch:1.05,
+  },
+}
+
+// ============================================================
+//  STATE
+// ============================================================
+let history     = []
+let isListening = false
+let isSpeaking  = false
+let recognition = null
+let mouthTimer  = null
+let currentEmo  = 'neutral'
+let typeTimer   = null
+
+const avatarWrap  = document.getElementById('avatarWrap')
+const avatarIW    = document.getElementById('avatarImgWrap')
+const micBtn      = document.getElementById('micBtn')
+const replyText   = document.getElementById('replyText')
+const userText    = document.getElementById('userText')
+const statusText  = document.getElementById('statusText')
+const emotionLabel= document.getElementById('emotionLabel')
+const nameTag     = document.getElementById('nameTag')
+const textbox     = document.getElementById('textbox')
+const cursor      = document.getElementById('cursor')
+const frameClosed = document.getElementById('frameClosed')
+const frameOpen   = document.getElementById('frameOpen')
+
+// ============================================================
+//  APPLY EMOTION
+// ============================================================
+function applyEmotion(name) {
+  const e = EMOTIONS[name] || EMOTIONS.neutral
+  currentEmo = name
+
+  // Ambient tint over bg
+  document.getElementById('ambientBg').style.background = e.ambientBg
+
+  // Avatar glow
+  avatarIW.style.filter = e.imgFilter
+  document.getElementById('glowRing').style.background  = e.glowBg
+  document.getElementById('glowRing').style.boxShadow   = e.glowColor
+  avatarIW.classList.toggle('glowing', name !== 'neutral')
+
+  // Avatar body animation class
+  avatarWrap.classList.remove('angry','happy','sad','smug')
+  if (e.avatarClass) avatarWrap.classList.add(e.avatarClass)
+
+  // Map emotions to image files
+  // happy + smug reuse neutral drawings
+  const imageMap = {
+    neutral: 'neutral',
+    angry:   'angry',
+    sad:     'sad',
+    happy:   'neutral',   // ✏️ change to 'happy' if you draw one later
+    smug:    'neutral',   // ✏️ change to 'smug' if you draw one later
+  }
+  const imgName = imageMap[name] || 'neutral'
+  frameClosed.src = '/' + imgName + '_closed.png'
+  frameOpen.src   = '/' + imgName + '_open.png'
+  frameClosed.style.opacity = '1'
+  // frameOpen stays at opacity:1 always — never touch it
+
+  // Textbox border colour
+  textbox.style.borderColor = e.borderColor
+  nameTag.style.borderColor = e.borderColor
+  nameTag.style.color = e.labelColor
+
+  // Reply text colour
+  replyText.style.color = e.textColor
+
+  
+
+  // Particles
+  if (e.particles.length > 0) spawnParticles(e.particles)
+}
+
+// ============================================================
+//  PARTICLES
+// ============================================================
+function spawnParticles(emojis) {
+  const c = document.getElementById('particles')
+  c.innerHTML = ''
+  emojis.forEach((emoji, i) => {
+    const p = document.createElement('div')
+    p.className = 'particle'
+    p.textContent = emoji
+    p.style.left   = (10 + Math.random() * 80) + '%'
+    p.style.top    = (20 + Math.random() * 50) + '%'
+    p.style.animationDelay = (i * 0.12) + 's'
+    c.appendChild(p)
+    setTimeout(() => p.remove(), 1800)
+  })
+}
+
+// ============================================================
+//  TYPEWRITER EFFECT for textbox
+// ============================================================
+function typewrite(text, onDone) {
+  clearInterval(typeTimer)
+  cursor.style.opacity = '1'
+  replyText.innerHTML = ''
+  replyText.appendChild(cursor)
+  let i = 0
+  typeTimer = setInterval(() => {
+    if (i < text.length) {
+      replyText.insertBefore(document.createTextNode(text[i]), cursor)
+      i++
+    } else {
+      clearInterval(typeTimer)
+      if (onDone) onDone()
+    }
+  }, 22)
+}
+
+// ============================================================
+//  MOUTH ANIMATION — swaps between _closed and _open frames
+//  ✏️  Change the interval (155) to adjust talking speed
+//     lower = faster,  higher = slower
+// ============================================================
+function startMouth() {
+  // Always clear first so it never runs twice
+  if (mouthTimer) { clearInterval(mouthTimer); mouthTimer = null }
+  let open = false
+  mouthTimer = setInterval(() => {
+    open = !open
+    frameClosed.style.opacity = open ? '0' : '1'
+  }, 300)
+}
+
+function stopMouth() {
+  clearInterval(mouthTimer)
+  mouthTimer = null
+  frameClosed.style.opacity = '1'  // bring closed back on top — open stays underneath
+}
+
+// ============================================================
+//  MIC
+// ============================================================
+function handleMic() {
+  if (isSpeaking) return
+  if (isListening) { recognition?.stop(); return }
+  startListening()
+}
+
+function startListening() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (!SR) { alert('Speech recognition requires Google Chrome.'); return }
+  recognition = new SR()
+  recognition.lang = 'en-US'
+  recognition.interimResults = false
+  recognition.maxAlternatives = 1
+
+  recognition.onstart = () => {
+    isListening = true
+    micBtn.classList.add('listening')
+    avatarWrap.classList.add('listening')
+    setStatus('LISTENING...')
+    userText.textContent = '...'
+    applyEmotion('neutral')
+  }
+  recognition.onresult = (e) => {
+    const said = e.results[0][0].transcript.trim()
+    userText.textContent = '❯ ' + said
+    sendToNAT(said)
+  }
+  recognition.onend = () => {
+    isListening = false
+    micBtn.classList.remove('listening')
+    avatarWrap.classList.remove('listening')
+    if (!isSpeaking) setStatus('READY')
+  }
+  recognition.onerror = (e) => {
+    isListening = false
+    micBtn.classList.remove('listening')
+    avatarWrap.classList.remove('listening')
+    setStatus('MIC ERROR: ' + e.error.toUpperCase())
+  }
+  recognition.start()
+}
+
+// ============================================================
+//  BACKEND
+// ============================================================
+async function sendToNAT(userSaid) {
+  history.push({ role:'user', content:userSaid })
+  micBtn.disabled = true
+  setStatus('THINKING...')
+  typewrite('...', null)
+
+  try {
+    const res = await fetch('/api/chat', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ messages: history })
+    })
+    if (!res.ok) throw new Error((await res.json()).error)
+    const { reply, emotion } = await res.json()
+    history.push({ role:'assistant', content:reply })
+
+    applyEmotion(emotion || 'neutral')
+    
+    typewrite(reply, null);
+    await speak(reply);    
+    
+
+  } catch(err) {
+    setStatus('ERROR: ' + err.message.toUpperCase())
+    typewrite('Something went wrong. Please try again.', null)
+    micBtn.disabled = false
+  }
+}
+
+// ============================================================
+//  TTS — calls Edge TTS on server, falls back to browser
+// ============================================================
+async function speak(text) {
+  micBtn.disabled = true
+
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    })
+
+    if (!res.ok) throw new Error('TTS server error')
+
+    const blob = await res.blob()
+    const url  = URL.createObjectURL(blob)
+    const audio = new Audio(url)
+
+    // Wrap in a promise so we can await it finishing
+    await new Promise((resolve) => {
+
+      audio.onplay = () => {
+        isSpeaking = true
+        avatarWrap.classList.add('speaking')
+        setStatus('SPEAKING...')
+        startMouth()
+      }
+
+      audio.onended = () => {
+        isSpeaking = false
+        avatarWrap.classList.remove('speaking')
+        micBtn.disabled = false
+        setStatus('YOUR TURN ▶')
+        stopMouth()
+        cursor.style.opacity = '0'
+        URL.revokeObjectURL(url)
+        resolve()
+      }
+
+      audio.onerror = () => {
+        URL.revokeObjectURL(url)
+        stopMouth()
+        isSpeaking = false
+        avatarWrap.classList.remove('speaking')
+        resolve()
+        speakBrowser(text)
+      }
+
+      audio.play().catch(() => {
+        stopMouth()
+        isSpeaking = false
+        avatarWrap.classList.remove('speaking')
+        resolve()
+        speakBrowser(text)
+      })
+    })
+
+  } catch (err) {
+    console.error('TTS fetch error:', err)
+    stopMouth()
+    isSpeaking = false
+    avatarWrap.classList.remove('speaking')
+    speakBrowser(text)
+  }
+}
+
+function setStatus(text) {
+  statusText.textContent = text
+}
+
+// ============================================================
+//  BROWSER TTS FALLBACK — used if ElevenLabs fails
+// ============================================================
+function speakBrowser(text) {
+  if (!window.speechSynthesis) { micBtn.disabled = false; return }
+  window.speechSynthesis.cancel()
+  const utter = new SpeechSynthesisUtterance(text)
+  utter.rate   = 0.80
+  utter.pitch  = 0.6
+  utter.volume = 0.9
+  const voices = window.speechSynthesis.getVoices()
+  const pick = voices.find(v =>
+    v.name.includes('Daniel') ||
+    v.name.includes('Alex') ||
+    v.name.includes('Fred') ||
+    v.name.includes('Google UK English Male') ||
+    v.name.includes('David')
+  ) || voices.find(v => v.lang.startsWith('en') && v.gender === 'male')
+    || voices.find(v => v.lang.startsWith('en'))
+  if (pick) utter.voice = pick
+  utter.onstart = () => {
+    isSpeaking = true
+    avatarWrap.classList.add('speaking')
+    setStatus('SPEAKING...')
+    startMouth()
+  }
+  utter.onend = () => {
+    isSpeaking = false
+    avatarWrap.classList.remove('speaking')
+    micBtn.disabled = false
+    setStatus('YOUR TURN ▶')
+    stopMouth()
+    cursor.style.opacity = '0'
+  }
+  utter.onerror = () => {
+    isSpeaking = false
+    avatarWrap.classList.remove('speaking')
+    micBtn.disabled = false
+    stopMouth()
+  }
+  window.speechSynthesis.speak(utter)
+}
+
+// Init
+applyEmotion('neutral')
+cursor.style.opacity = '1'
+if (window.speechSynthesis) {
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices()
+}
+</script>
+</body>
+</html>
