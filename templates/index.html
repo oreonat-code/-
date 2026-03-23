@@ -744,6 +744,24 @@ function speakBrowser(text) {
   }
   window.speechSynthesis.speak(utter)
 }
+// ====================================================
+//    CANCEL SHORTCUT
+// ====================================================
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    // Stop recognition if listening
+    if (isListening) recognition?.stop()
+
+    // Stop audio if speaking
+    window.speechSynthesis?.cancel()
+    isSpeaking = false
+    avatarWrap.classList.remove('speaking')
+    micBtn.disabled = false
+    stopMouth()
+    setStatus('CANCELLED — READY')
+    userText.textContent = '↺ Cancelled — press mic to try again'
+  }
+})
 
 // Init
 applyEmotion('neutral')
@@ -751,6 +769,9 @@ cursor.style.opacity = '1'
 if (window.speechSynthesis) {
   window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices()
 }
+
+
+
 </script>
 </body>
 </html>
